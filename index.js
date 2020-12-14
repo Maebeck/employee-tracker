@@ -268,3 +268,67 @@ async function view(table) {
             return init();
     }
 };
+
+async function addEmployee() {
+    const depts = await db.getDepartments();
+    const deptChoices = depts.map(({ id, name }) => ({
+        name: name,
+        value: id
+    }));
+    await inquirer.prompt([{
+        name: 'firstName',
+        type: 'input',
+        message: 'First name?',
+    },
+    {
+        name: 'lastName',
+        type: 'input',
+        message: 'Last name?',
+    },
+    {
+        name: 'dept',
+        type: 'list',
+        message: 'Department?',
+        choices: deptChoices,
+    }]).then(async function (answer) {
+        const roles = await db.getRoles(answer.dept);
+        const roleChoices = roles.map(({ title, id }) => ({
+            name: title,
+            value: id
+        }));
+        await inquirer.prompt({
+            name: 'role',
+            type: 'list',
+            message: 'Role?',
+            choices: roleChoices
+        }).then(async function (answer2) {
+            const mgrs = await db.getEmployee('all');
+            const mgrChoices = mgrs.map(({ id, first_name, last_name }) => ({
+                name: first_name.concat(' ', last_name),
+                value: id
+            }));
+            await inquirer.prompt({
+                name: 'mgr',
+                type: 'list',
+                message: 'Manager?',
+                choices: mgrChoices
+            }).then(async function (answer3) {
+                await db.insertEmp(answer.firstName, answer.lastName, answer2.role, answer3.mgr)
+                console.log('\n' + 'New employee added!' + '\n');
+                init();
+            })
+        });
+    })
+};
+
+async function addDepartment() {
+    await inquirer.prompt({
+        name: 'dept',
+        type: 'input',
+        message: 'Department name?',
+    }).then(async function (answer) {
+        await db.insertDept(answer.dept);
+        console.log('\n' + 'New Department added!' + '\n');
+        init();
+    })
+};
