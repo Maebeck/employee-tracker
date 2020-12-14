@@ -1,7 +1,7 @@
 const inquirer = require('inquirer');
 const cTable = require('console.table');
 const connection = require('./connection.js');
-const db = require('./db/db.js');
+const db = require('./db/database.js');
 
 const valSalary = (salary) => {
     if (/^[\d]+$/g.test(salary)) {
@@ -478,3 +478,322 @@ async function updateEmployee(empSelection) {
             }
         })
     }
+    async function updateDepartment() {
+        const depts = await db.getDepartments();
+        const deptChoices = depts.map(({ id, name }) => ({
+            name: name,
+            value: id
+        }));
+        await inquirer.prompt([{
+            name: 'dept',
+            type: 'list',
+            message: 'Department to update?',
+            choices: deptChoices,
+        },
+        {
+            name: 'deptName',
+            type: 'input',
+            message: 'New Department name?',
+        }]).then(async function (answer) {
+            await db.updateDept(answer.deptName, answer.dept);
+            console.log('\n' + 'Department Updated!' + '\n');
+            init();
+        })
+    };
+    
+    async function updateRole() {
+        const roles = await db.getRoles();
+        const roleChoices = roles.map(({ id, title }) => ({
+            name: title,
+            value: id
+        }));
+        await inquirer.prompt([{
+            name: 'role',
+            type: 'list',
+            message: 'Role to update?',
+            choices: roleChoices,
+        },
+        {
+            name: 'roleName',
+            type: 'input',
+            message: 'New Role name?',
+        },
+        {
+            name: 'roleSalary',
+            type: 'input',
+            message: 'Updated salary?',
+            validate: (salary) => valSalary(salary),
+        }]).then(async function (answer) {
+            await db.updateRole(answer.roleName, answer.roleSalary, answer.role);
+            console.log('\n' + 'Role Updated!' + '\n');
+            init();
+        })
+    };
+    
+    async function removeEmployee(empSelection) {
+        await inquirer.prompt(
+            {
+                name: 'emp',
+                type: 'list',
+                message: 'Choose Employee to remove',
+                choices: empSelection
+            }).then(async function (answer) {
+                const roleId = await db.getRoleId(answer.emp)
+                console.log(roleId[0].role_id);
+                removeEmp(roleId[0].role_id);
+            })
+    };
+    
+    async function removeRoleOrDept(table) {
+        switch (table) {
+            case 'dept':
+                const dept = await db.getDepartments()
+                const deptChoices = dept.map(({ id, name }) => ({
+                    name: name,
+                    value: id
+                }));
+                await inquirer.prompt(
+                    {
+                        name: 'value',
+                        type: 'list',
+                        message: 'Department to remove?',
+                        choices: deptChoices,
+                    }
+                ).then(async function (answer) {
+                    const id = answer.value;
+                    await removeDept(id, deptChoices);
+                })
+                break;
+            case 'role':
+                const roles = await db.getRoles();
+                const roleChoices = roles.map(({ title, deptId }) => ({
+                    name: title,
+                    value: deptId
+                }));
+                await inquirer.prompt(
+                    {
+                        name: 'value',
+                        type: 'list',
+                        message: 'Role to remove?',
+                        choices: roleChoices,
+                    }
+                ).then(async function (answer) {
+                    const id = answer.value;
+                    await removeRole(id, roleChoices);
+                });
+                break;
+        }
+    };
+    
+    async function removeDept(id, deptChoices) {
+        const hasRoles = await db.roleCount(id)
+        if (hasRoles) {
+            console.log('Has Roles');
+            const roles = await db.getRoles(id);
+            const roleChoices = roles.map(({ title, id }) => ({
+                name: title,
+                value: id
+            }));
+            console.log('\n' + 'These roles need to be moved to a new department or removed' + '\n');
+            console.table(roles);
+            await inquirer.prompt(
+                {
+                    name: 'action',
+                    type: 'list',
+                    message: 'Update or Remove roles?',
+                    choices: [
+                        'Update',
+                        'Remove'
+                    ]
+                }).then(async function (answer) {
+                    switch (answer.action) {
+                        case 'Update':
+                            await inquirer.prompt(
+                                {
+                                    name: 'value',
+                                    type: 'list',
+                                    message: 'New Department for these roles?',
+                                    choices: deptChoices,
+                                }
+                            ).then(async function (answer4) {
+                                await db.updateRoleDept(answer4.value, id);
+                                console.log('\n' + 'Roles Updated!' + '\n');
+                                await db.delete('department', id);
+                                console.log('\n' + 'Department Removed!' + '\n');
+                                init();
+                            })
+                            break;
+                        case 'Remove':
+                            await removeRoleDept(id, roleChoices);
+                            await db.delete('department', id);
+                            console.log('\n' + 'Department Removed!' + '\n');
+                            return;
+                    }
+                })
+    
+        } else {
+            await db.delete('department', id);
+            console.log('\n' + 'Department Removed!' + '\n');
+            init();
+        }
+    }
+    
+    async function removeRoleDept(deptId, roleChoices) {
+        const hasEmp = await db.empCount(deptId);
+        if (hasEmp) {
+            const roles = await db.getEmployee('dept', deptId);
+            console.log('\n' + 'These employees need to be moved to a new role or removed' + '\n');
+            console.table(roles);
+            await inquirer.prompt(
+                {
+                    name: 'action',
+                    type: 'list',
+                    message: 'Update or Remove employees?',
+                    choices: [
+                        'Update',
+                        'Remove'
+                    ]
+                }).then(async function (answer) {
+                    switch (answer.action) {
+                        case 'Update':
+                            await inquirer.prompt(
+                                {
+                                    name: 'value',
+                                    type: 'list',
+                                    message: 'New Role for these employees?',
+                                    choices: roleChoices,
+                                }
+                            ).then(async function (answer4) {
+                                await db.updateEmpRole(answer4.value, deptId);
+                                console.log('\n' + 'Employees Updated!' + '\n');
+                                await db.deleteRoleDept(deptId);
+                                console.log('\n' + 'Role Removed!' + '\n');
+                                init();
+                            })
+                            return;
+                        case 'Remove':
+                            await db.updateEmp('MgrNull','','','','',deptId);
+                            await removeEmpDept(deptId);
+                            await db.deleteRoleDept(deptId);
+                            console.log('\n' + 'Role Removed!' + '\n');
+                            return;
+                    }
+                })
+        } else {
+            await db.deleteRoleDept(deptId);
+            console.log('\n' + 'Role Removed!' + '\n');
+            init();
+        }
+    };
+    
+    async function removeRole(roleId, roleChoices) {
+        const hasEmp = await db.empCount(roleId);
+        if (hasEmp) {
+            const roles = await db.getEmployee('role', roleId);
+            console.log('\n' + 'These employees need to be moved to a new role or removed' + '\n');
+            console.table(roles);
+            await inquirer.prompt(
+                {
+                    name: 'action',
+                    type: 'list',
+                    message: 'Update or Remove?',
+                    choices: [
+                        'Update',
+                        'Remove'
+                    ]
+                }).then(async function (answer) {
+                    switch (answer.action) {
+                        case 'Update':
+                            await inquirer.prompt(
+                                {
+                                    name: 'value',
+                                    type: 'list',
+                                    message: 'New Role for these employees?',
+                                    choices: roleChoices,
+                                }
+                            ).then(async function (answer4) {
+                                await db.updateEmpRole(answer4.value);
+                                console.log('\n' + 'Employees Updated!' + '\n');
+                                await db.delete('role',roleId);
+                                console.log('\n' + 'Role Removed!' + '\n');
+                                init();
+                            })
+                            return;
+                        case 'Remove':
+                            await removeEmp(roleId);
+                            await db.delete('role',roleId);
+                            console.log('\n' + 'Role Removed!' + '\n');
+                            return;
+                    }
+                })
+        } else {
+            await db.delete('role',roleId);
+            console.log('\n' + 'Role Removed!' + '\n');
+            init();
+        }
+    };
+    
+    async function removeEmp(roleId) {
+        const hasMgr = await db.mgrCount(roleId);
+        if (hasMgr) {
+            const emp = await db.getEmployee('mgrRole', roleId);
+            console.log('\n' + 'These Employees have a Manager you are trying to delete' + '\n');
+            console.table(emp);
+            const employees = await db.getEmployee('all')
+            const mgrChoices = employees.map(({ id, first_name, last_name }) => ({
+                name: first_name.concat(' ', last_name),
+                value: id
+            }));
+            await inquirer.prompt(
+                {
+                    name: 'value',
+                    type: 'list',
+                    message: 'New Manager for these employees?',
+                    choices: mgrChoices,
+                }
+            ).then(async function (answer4) {
+                await db.updateEmp('MgrRole', '', '', '', answer4.value, roleId);
+                console.log('\n' + 'Employees Updated!' + '\n');
+                await db.deleteEmpRole(roleId);
+                console.log('\n' + 'Employees Removed' + '\n');
+                init();
+            })
+        } else {
+            await db.deleteEmpRole(roleId);
+            console.log('\n' + 'Employees Removed' + '\n');
+            init();
+        }
+    
+    };
+    
+    async function removeEmpDept(deptId) {
+        const hasMgr = await db.mgrCount(deptId);
+        if (hasMgr) {
+            const emp = await db.getEmployee('mgrDept', deptId);
+            console.log('\n' + 'These Employees have a Manager you are trying to delete' + '\n');
+            console.table(emp);
+            const employees = await db.getEmployee('all')
+            const mgrChoices = employees.map(({ id, first_name, last_name }) => ({
+                name: first_name.concat(' ', last_name),
+                value: id
+            }));
+            await inquirer.prompt(
+                {
+                    name: 'value',
+                    type: 'list',
+                    message: 'New Manager for these employees?',
+                    choices: mgrChoices,
+                }
+            ).then(async function (answer4) {
+                await db.updateEmp('MgrDept', '', '', '', answer4.value, deptId);
+                console.log('\n' + 'Employees Updated!' + '\n');
+                await db.deleteEmpDept(deptId);
+                console.log('\n' + 'Employees Removed' + '\n');
+                init();
+            })
+        } else {
+            await db.deleteEmpDept(deptId);
+            console.log('\n' + 'Employees Removed' + '\n');
+            init();
+        }
+    };
