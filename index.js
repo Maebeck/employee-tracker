@@ -332,3 +332,149 @@ async function addDepartment() {
         init();
     })
 };
+
+async function addRole() {
+    const depts = await db.getDepartments();
+    const deptChoices = depts.map(({ id, name }) => ({
+        name: name,
+        value: id
+    }));
+    await inquirer.prompt([{
+        name: 'dept',
+        type: 'list',
+        message: 'Department?',
+        choices: deptChoices,
+    },
+    {
+        name: 'title',
+        type: 'input',
+        message: 'Role name?',
+    },
+    {
+        name: 'salary',
+        type: 'input',
+        message: 'Salary?',
+        validate: (salary) => valSalary(salary)
+
+    }]).then(async function (answer) {
+        await db.insertRole(answer.title, answer.salary, answer.dept);
+        console.log('\n' + 'New Role added!' + '\n');
+        init();
+    })
+};
+
+async function updateEmployee(empSelection) {
+    await inquirer.prompt([
+        {
+            name: 'emp',
+            type: 'list',
+            message: 'Choose Employee to update',
+            choices: empSelection
+        },
+        {
+            name: 'update',
+            type: 'list',
+            message: 'What would you like to update?',
+            choices: [
+                'First Name',
+                'Last Name',
+                'Full Name',
+                'Role, Department, or Salary',
+                'Manager',
+                'Back',
+                'Exit',
+            ]
+        }
+    ]).then(async function (answer){
+        switch (answer.update) {
+            case 'Full Name':
+                await inquirer.prompt(
+                    [
+                        {
+                            name: 'firstName',
+                            type: 'input',
+                            message: 'First name?',
+                        },
+                        {
+                            name: 'lastName',
+                            type: 'input',
+                            message: 'Last name?',
+                        } 
+                    ]
+                    ).then(async function (answer2) {
+                        await db.updateEmp(answer.update, answer2.firstName, answer2.lastName, answer2.role, answer2.mgr, answer.emp);
+                        console.log('\n' + `Employee's full name updated!` + '\n');
+                        init();
+                    })
+                    break;
+                case 'First Name':
+                    await inquirer.prompt(
+                        {
+                            name: 'firstName',
+                            type: 'input',
+                            message: 'First name?',
+                        }
+                    ).then(async function (answer2) {
+                        await db.updateEmp(answer.update, answer2.firstName, answer2.lastName, answer2.role, answer2.mgr, answer.emp);
+                        console.log('\n' + `Employee's first name updated!` + '\n');
+                        init();
+                    })
+                    break;
+                case 'Last Name':
+                    await inquirer.prompt(
+                        {
+                            name: 'lastName',
+                            type: 'input',
+                            message: 'Last name?',
+                        }
+                    ).then(async function (answer2) {
+                        await db.updateEmp(answer.update, answer2.firstName, answer2.lastName, answer2.role, answer2.mgr, answer.emp);
+                        console.log('\n' + `Employee's last name updated!` + '\n');
+                        init();
+                    })
+                    break;
+                case 'Role, Department, and Salary':
+                    const roles = await db.getRoles('mappable');
+                    const roleChoices = roles.map(({ title, id, name, salary }) => ({
+                        name: title.concat(', ', name, ', ', salary),
+                        value: id
+                    }));
+                    await inquirer.prompt({
+                        name: 'role',
+                        type: 'list',
+                        message: 'Role?',
+                        choices: roleChoices
+                    }
+                    ).then(async function (answer2) {
+                        await db.updateEmp(answer.update, answer2.firstName, answer2.lastName, answer2.role, answer2.mgr, answer.emp);
+                        console.log('\n' + `Employee's Role updated!` + '\n');
+                        init();
+                    })
+                    break;
+                case 'Manager':
+                    const mgr = await db.getEmployee('all');
+                    const mgrChoices = mgr.map(({ id, first_name, last_name }) => ({
+                        name: first_name.concat(' ', last_name),
+                        value: id
+                    }));
+                    await inquirer.prompt(
+                        {
+                            name: 'mgr',
+                            type: 'list',
+                            message: 'Manager?',
+                            choices: mgrChoices,
+                        }
+                    ).then(async function (answer2) {
+                        await db.updateEmp(answer.update, answer2.firstName, answer2.lastName, answer2.role, answer2.mgr, answer.emp);
+                        console.log('\n' + `Employee's Manager updated!` + '\n');
+                        init();
+                    })
+                    break;
+                case 'Back':
+                    return init();
+                case 'Exit':
+                    connection.end();
+                    break;
+            }
+        })
+    }
